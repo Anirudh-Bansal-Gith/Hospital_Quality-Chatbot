@@ -8,12 +8,12 @@ import time
 
 st.set_page_config(
     page_title= 'AI Quality Assist',
-    page_icon="logo.jpeg", 
     layout="wide"
 )
 
 hide_st_style = """
     <style>
+
     html, body, #root, [data-testid="stAppViewContainer"] {
         margin: 0 !important;
         padding: 0 !important;
@@ -25,15 +25,22 @@ hide_st_style = """
         display: none !important;
     }
 
-    .block-container {
-        padding-top: 0rem !important;
-        margin-top: 0rem !important;
+
+    .stMainBlockContainer {
+        padding-top: 80px !important; /* Adjust based on header height + gap */
+        padding-bottom: 100px !important; /* Space for the chat input */
+    }
+
+
+    .stChatInputContainer {
+        z-index: 1001 !important;
+        background-color: transparent !important;
     }
     </style>
 """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-
+# 2. Fixed White Header
 st.markdown(
     """
     <div style="
@@ -51,20 +58,6 @@ st.markdown(
     ">
         <h2 style="margin: 0; color: #31333F; font-family: sans-serif;">🏥 Hospital Quality Guide</h2>
     </div>
-    
-    <style>
-    .stApp {
-        margin-top: 70px;
-    }
-
-    .stChatInputContainer {
-        z-index: 1001 !important;
-    }
-
-    header {
-        visibility: hidden;
-    }
-    </style>
     """,
     unsafe_allow_html=True
 )
