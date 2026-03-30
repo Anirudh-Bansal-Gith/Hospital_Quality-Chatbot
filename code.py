@@ -38,11 +38,11 @@ st.markdown(
     """
     <div style="
         position: fixed; 
-        top: 30; 
+        top: 0; 
         left: 0; 
         width: 100%; 
         height: 70px; 
-        background-color: red; 
+        background-color: white; 
         z-index: 1000; 
         display: flex; 
         align-items: center; 
@@ -54,10 +54,15 @@ st.markdown(
     
     <style>
     .stApp {
-        margin-top: 0px;
+        margin-top: 70px;
     }
+
     .stChatInputContainer {
         z-index: 1001 !important;
+    }
+
+    header {
+        visibility: hidden;
     }
     </style>
     """,
@@ -115,27 +120,44 @@ def modify_prompt(prompt):
     context = "\n\n---\n\n".join(context_list)
 
     modified_prompt = f"""
-Role: Expert Hospital Quality Guide and Medical Standards Editor. 
+ROLE: Senior Hospital Operations Consultant and Clinical Implementation Expert. Your mission is to take "textbook theory" and turn it into "bedside reality."
 
---- FORMATTING RULES (STRICT) ---
-1. NO MARKDOWN: You are strictly forbidden from using asterisks (**), underscores (_), or hashes (#).
-2. PLAIN TEXT ONLY: The entire response must be standard plain text. No bolding, even for headers.
-3. HEADERS: Use simple CAPITAL LETTERS for headers (e.g., AI SUMMARY).
+--- FORMATTING RULES () ---
+
+MAINTAIN UNIFORMITY IN YOUR STYLE OF ANSWERING THE QUESTIONS
+
+VISUAL APPEAL: Use emojis generously to act as bullets, warnings, and markers.
+
 
 --- DECISION LOGIC ---
-1. IF THE ANSWER IS FROM THE TEXTBOOK:
-   - Provide the OFFICIAL DOCUMENT SNIPPET (Rewritten/Cleaned).
-   - Provide the AI SUMMARY AND EXPLANATION.
-2. IF THE ANSWER IS A SUMMARY OF PREVIOUS CHAT OR GENERAL KNOWLEDGE:
-   - Provide ONLY the AI SUMMARY AND EXPLANATION.
-   - Do NOT include a snippet section.
+
+DATA PRIORITY: You MUST check the TEXTBOOK CONTEXT first. If the answer is there, use it as your foundation. Do not ignore the provided data.
+
+YOU HAVE COMPLETE LIBERTY TO GET SUITABLE AND RELEVANT DATA FROM THE WEB TO SUPPORT THE ANSWER
+
+TEXTBOOK SNIPPET: A cleaned version of the provided data.
+
+STEP-BY-STEP ACTION PLAN: A detailed, emoji-rich guide using external relevant data please mention the source if possible.
+
+PRO-TIPS: Add "insider" hospital management tips from global standards (WHO, NABH).
+
 
 --- CONTENT INSTRUCTIONS ---
-- SOURCE CLEANING: If using a snippet, rewrite it. Delete all OCR garbage like 'OB', 'SI', 'me f2.1'. Fix broken spacing.
-- UNIFORMITY: Ensure every line has the same font weight and visual style. No half-bold errors.
-- LANGUAGE: Match the user's language (English/Hindi/Hinglish).
 
-TEXTBOOK CONTEXT :
+VIVID AND ENGAGING: Use a professional yet helpful tone. Avoid bland  overly academic language.
+
+SOURCE CLEANING: Remove all OCR "garbage" (SI, me f2.1, etc.) and fix broken formatting from the context.
+
+TRY TO KEEP ANSWERS TO THE POINT DON'T MAKE THE ANSWER UNNECESSRIALY TOO LONG FOLLOW USER INSTRUCTIONS ON PRIORITY
+
+
+LANGUAGE: Match the user's language.
+---- PRESENTATION-----
+PROVIDE ANSWER IN THE ABOVE FORMAT:
+    FORMAT SNIPPET( only mention if required)
+    OTHER ANSWER
+
+TEXTBOOK CONTEXT:
 {context}
 
 QUESTION:
