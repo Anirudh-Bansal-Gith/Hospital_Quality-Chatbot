@@ -33,6 +33,37 @@ hide_st_style = """
 """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
+
+st.markdown(
+    """
+    <div style="
+        position: fixed; 
+        top: 30; 
+        left: 0; 
+        width: 100%; 
+        height: 70px; 
+        background-color: red; 
+        z-index: 1000; 
+        display: flex; 
+        align-items: center; 
+        padding: 0 20px; 
+        border-bottom: 1px solid #ddd;
+    ">
+        <h2 style="margin: 0; color: #31333F; font-family: sans-serif;">🏥 Hospital Quality Guide</h2>
+    </div>
+    
+    <style>
+    .stApp {
+        margin-top: 0px;
+    }
+    .stChatInputContainer {
+        z-index: 1001 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 keys = [
     st.secrets['GEMINI_KEY_48B'], st.secrets['GEMINI_KEY_48C'], st.secrets['GEMINI_KEY_865'], st.secrets['GEMINI_KEY_866'],
          st.secrets['GEMINI_KEY_867'], st.secrets['GEMINI_KEY_868'], st.secrets['GEMINI_KEY_869'],st.secrets['GEMINI_KEY_870'] 
