@@ -167,7 +167,7 @@ for message in st.session_state.messages:
         
 
 
-prompt = st.chat_input()
+prompt = st.chat_input('Your query')
 
 if prompt:
     with st.chat_message('user'):
