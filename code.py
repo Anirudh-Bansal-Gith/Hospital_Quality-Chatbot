@@ -70,7 +70,7 @@ def get_db_collection():
 
 client = genai.Client(api_key=st.session_state.assigned_key)
 collection = get_db_collection()
-ai_model = "gemini-2.5-flash" 
+ai_model = "gemini-2.5-flash-lite" 
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
