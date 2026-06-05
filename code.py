@@ -1,28 +1,37 @@
+from google import genai
+import chromadb
+import os
 import streamlit as st
 import random
 import time
-import re
-from google import genai
-import chromadb
 
-# --- 1. UI SETUP & CSS ---
-st.set_page_config(page_title='AI Quality Assist', layout="wide")
+
+st.set_page_config(
+    page_title= 'AI Quality Assist',
+    layout="wide"
+)
 
 hide_st_style = """
     <style>
+
     html, body, #root, [data-testid="stAppViewContainer"] {
         margin: 0 !important;
         padding: 0 !important;
     }
+
     [data-testid="stHeader"], 
     [data-testid="stDecoration"], 
     footer {
         display: none !important;
     }
+
+
     .stMainBlockContainer {
-        padding-top: 80px !important; 
-        padding-bottom: 100px !important; 
+        padding-top: 80px !important; /* Adjust based on header height + gap */
+        padding-bottom: 100px !important; /* Space for the chat input */
     }
+
+
     .stChatInputContainer {
         z-index: 1001 !important;
         background-color: transparent !important;
@@ -31,6 +40,7 @@ hide_st_style = """
 """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
+# 2. Fixed White Header
 st.markdown(
     """
     <div style="
@@ -52,124 +62,147 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- 2. INITIALIZATION & KEY ROTATION ---
 keys = [
-    st.secrets['GEMINI_KEY_48B'], st.secrets['GEMINI_KEY_48C'], 
-    st.secrets['GEMINI_KEY_865'], st.secrets['GEMINI_KEY_866'],
-    st.secrets['GEMINI_KEY_867'], st.secrets['GEMINI_KEY_868'], 
-    st.secrets['GEMINI_KEY_869'], st.secrets['GEMINI_KEY_870'] 
-]
+    st.secrets['GEMINI_KEY_48B'], st.secrets['GEMINI_KEY_48C'], st.secrets['GEMINI_KEY_865'], st.secrets['GEMINI_KEY_866'],
+         st.secrets['GEMINI_KEY_867'], st.secrets['GEMINI_KEY_868'], st.secrets['GEMINI_KEY_869'],st.secrets['GEMINI_KEY_870'] 
+        ]
 
-if 'assigned_key' not in st.session_state:
-    st.session_state.assigned_key = random.choice(keys)
+@st.cache_resource
+def get_genai_client(api_key):
+    return genai.Client(api_key=api_key)
+
 
 @st.cache_resource
 def get_db_collection():
     db_client = chromadb.PersistentClient(path="textbook_db")
     return db_client.get_or_create_collection(name="textbook_collection")
 
-client = genai.Client(api_key=st.session_state.assigned_key)
+
+if 'assigned_key' not in st.session_state:
+    st.session_state.assigned_key = random.choice(keys)
+
+client = get_genai_client(st.session_state.assigned_key)
 collection = get_db_collection()
-ai_model = "gemini-2.5-flash-lite" 
+ai_model = "gemini-2.5-flash-lite"
+
+
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "chat_session" not in st.session_state:
+    st.session_state.chat_session = client.chats.create(model=ai_model)
 
-# --- 3. TWO-PASS AUDIT ENGINE ---
 
-def get_context_and_audit(prompt, full_history):
-    # Step A: Distill Query (Remove MCQ options from search to avoid embedding poisoning)
-    lines = [line.strip() for line in prompt.split('\n') if line.strip()]
-    question_stem = lines[0] if lines else prompt
-    
-    search_term = question_stem
-    for line in lines[:3]:
-        match = re.search(r'([A-H]\d+)', line, re.IGNORECASE)
-        if match:
-            search_term = match.group(1)
-            break
+def modify_prompt(prompt):
 
-    # Step B: Vector Database Query
     r = client.models.embed_content(
         model="gemini-embedding-2-preview", 
-        contents=search_term, 
-        config={'output_dimensionality': 768}
+        contents = prompt, config={'output_dimensionality': 768}
     )
-    results = collection.query(query_embeddings=[r.embeddings[0].values], n_results=8)
-    raw_context = "\n\n---\n\n".join(results['documents'][0])
+    query_vector = r.embeddings[0].values
+    results = collection.query(
+        query_embeddings=[query_vector], 
+        n_results=5)
 
-    # Step C: Format conversation history window
-    history_text = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in full_history[-3:]]) if full_history else "No history."
+    context_list = []
+    for doc, meta in zip(results['documents'][0], results['metadatas'][0]):
+        source_info = f"[BOOK: {meta.get('book', 'Unknown')} | PAGE: {meta.get('page_num', 'N/A')}]"
+        context_list.append(f"{source_info}\n{doc}")
 
-    # --- PASS 1: FACT ISOLATION ---
-    extraction_prompt = f"""
-    You are a clinical data extraction bot. Read the NQAS reference text below and pull out EVERY explicit rule, numeric limit, time frame, or measurable element description related strictly to: "{search_term}".
-    Do not look at any multiple choice options. Do not extrapolate. Give me plain raw facts.
-    
-    TEXTBOOK CONTEXT:
-    {raw_context}
-    """
-    verified_facts = client.models.generate_content(model=ai_model, contents=extraction_prompt).text
+    context = "\n\n---\n\n".join(context_list)
 
-    # --- PASS 2: ADVERSARIAL AUDIT ---
-    audit_prompt = f"""
-    ROLE: Elite, Zero-Tolerance NQAS Compliance Auditor.
-    
-    PREVIOUS DISCUSSION HISTORY:
-    {history_text}
-    
-    TARGET QUESTION & OPTIONS:
-    {prompt}
-    
-    VERIFIED TEXTBOOK FACTS:
-    {verified_facts}
-    
-    AUDIT PROTOCOL:
-    1. Evaluate choice options (a), (b), (c), and (d) completely INDEPENDENTLY against the VERIFIED TEXTBOOK FACTS.
-    2. Check for collective options: If options (a), (b), and (c) are all separately accurate components found in the facts, you are strictly REQUIRED to select the collective answer (e.g., 'All of the above').
-    3. Do not jump to the first positive keyword. Validate every option systematically before declaring the choice.
-    
-    FORMATTING:
-    Format strictly with: ✅ CORRECT ANSWER, 📖 TEXTBOOK EVIDENCE, and ⚡ QUICK RATIONALE. Use emojis cleanly.
-    """
-    
-    return client.models.generate_content(model=ai_model, contents=audit_prompt).text
+    modified_prompt = f"""
+ROLE: Senior Hospital Operations Consultant and Clinical Implementation Expert. Your mission is to take "textbook theory" and turn it into "bedside reality."
+
+--- FORMATTING RULES () ---
+
+MAINTAIN UNIFORMITY IN YOUR STYLE OF ANSWERING THE QUESTIONS
+
+VISUAL APPEAL: Use emojis generously to act as bullets, warnings, and markers.
 
 
-# --- 4. STREAMLIT UI EXECUTION ---
+--- DECISION LOGIC ---
+
+DATA PRIORITY: You MUST check the TEXTBOOK CONTEXT first. If the answer is there, use it as your foundation. Do not ignore the provided data.
+
+YOU HAVE COMPLETE LIBERTY TO GET SUITABLE AND RELEVANT DATA FROM THE WEB TO SUPPORT THE ANSWER
+
+TEXTBOOK SNIPPET: A cleaned version of the provided data.
+
+STEP-BY-STEP ACTION PLAN: A detailed, emoji-rich guide using external relevant data please mention the source if possible.
+
+PRO-TIPS: Add "insider" hospital management tips from global standards (WHO, NABH).
+
+
+--- CONTENT INSTRUCTIONS ---
+
+VIVID AND ENGAGING: Use a professional yet helpful tone. Avoid bland  overly academic language.
+
+SOURCE CLEANING: Remove all OCR "garbage" (SI, me f2.1, etc.) and fix broken formatting from the context.
+
+TRY TO KEEP ANSWERS TO THE POINT DON'T MAKE THE ANSWER UNNECESSRIALY TOO LONG FOLLOW USER INSTRUCTIONS ON PRIORITY
+
+
+LANGUAGE: Match the user's language.
+---- PRESENTATION-----
+PROVIDE ANSWER IN THE ABOVE FORMAT:
+    FORMAT SNIPPET( only mention if required)
+    OTHER ANSWER
+
+TEXTBOOK CONTEXT:
+{context}
+
+QUESTION:
+{prompt}
+
+ANSWER:
+"""
+
+    return modified_prompt
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        
 
-if prompt := st.chat_input('Paste MCQ or ask a follow-up...'):
-    
-    with st.chat_message('user'): 
-        st.markdown(prompt)
-    
-    with st.spinner('Auditing Answer...'): 
+
+prompt = st.chat_input('Your query')
+
+if prompt:
+    with st.chat_message('user'):
+        st.write(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+    with st.spinner('Generating Response...'): 
         try:
-            response = get_context_and_audit(prompt, st.session_state.messages)
+
+            final_prompt = modify_prompt(prompt)
+
+            response = st.session_state.chat_session.send_message(final_prompt)
             
-            with st.chat_message('assistant'): 
-                st.markdown(response)
-                
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            st.session_state.messages.append({"role": "assistant", "content": response})
+
+            with st.chat_message('ai'):
+                st.write(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+
+            row_response = [prompt,response.text, st.session_state.assigned_key]
+
                     
         except Exception as e:
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                 if "PerDay" in str(e):
-                    old_key = st.session_state.assigned_key
-                    new_key = random.choice([k for k in keys if k != old_key])
+                    old_key = st.session_state.user_assigned_key
+                    new_key = random.choice(keys)
+                    while new_key == old_key:
+                        new_key= random.choice(keys)
                     st.session_state.assigned_key = new_key
-                    
                     client = genai.Client(api_key=new_key)
+                    st.session_state.chat_session = client.chats.create(model=ai_model)
+
                     st.rerun()
                 else:
-                    st.warning("⏳ Minute limit hit. Sleeping for 60 seconds...")
+                    print("   ⏳ Minute limit hit (429). Sleeping for 60 seconds...")
                     time.sleep(60)
-                    st.rerun()
             else:
-                st.error(f"Execution Error: {e}")
+                st.error(f"Error: {e}")
