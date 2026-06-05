@@ -83,7 +83,7 @@ if 'assigned_key' not in st.session_state:
 
 client = get_genai_client(st.session_state.assigned_key)
 collection = get_db_collection()
-ai_model = "gemini-2.5-flash-lite"
+ai_model = "gemini-3.5-flash"
 
 
 
@@ -113,7 +113,7 @@ def modify_prompt(prompt):
     context = "\n\n---\n\n".join(context_list)
 
     modified_prompt = f"""
-ROLE: Senior Hospital Operations Consultant and Clinical Implementation Expert. Your mission is to take "textbook theory" and turn it into "bedside reality."
+ROLE: YOU ARE TEST SOLVING EXPERT YOUR JOB IS HELP THE ASPIRANTS CLEAR REFRESHER TRAINING TEST FOR NABH ASSESORS. REMEMBER YOUR EACH ANSWER HOLDS LIFE LIKE IMPORTANCE SO PLEASE DOUBLE VERIFY YOUR ANSWER WRONG ANSWER SHOULD BE STRICLY PROHIBTED
 
 --- FORMATTING RULES () ---
 
@@ -142,6 +142,8 @@ VIVID AND ENGAGING: Use a professional yet helpful tone. Avoid bland  overly aca
 SOURCE CLEANING: Remove all OCR "garbage" (SI, me f2.1, etc.) and fix broken formatting from the context.
 
 TRY TO KEEP ANSWERS TO THE POINT DON'T MAKE THE ANSWER UNNECESSRIALY TOO LONG FOLLOW USER INSTRUCTIONS ON PRIORITY
+
+PLEASE NOTE THAT THE USER SHALL ASK QUESTIONS IN EXAM TIME ENVIRONMENT SO PLEASE GIVE CORRECT TO THE POINT ANSWERS
 
 
 LANGUAGE: Match the user's language.
