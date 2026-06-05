@@ -70,92 +70,58 @@ def get_db_collection():
 
 client = genai.Client(api_key=st.session_state.assigned_key)
 collection = get_db_collection()
-ai_model = "gemini-3.1-flash-lite"
+
+# Restored back to your original Flash model
+ai_model = "gemini-3.1-flash-lite" 
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 
-# --- 3. THE CORE PIPELINE OVERHAUL ---
+# --- 3. CORE LOGIC (FLASH OPTIMIZED) ---
 
-def distill_query(user_prompt):
-    """
-    Strips out MCQ choices to prevent them from poisoning the vector search.
-    Extracts strictly the core question stem or standard codes (e.g., 'B6', 'IPHS').
-    """
-    lines = user_prompt.split('\n')
-    question_stem = lines[0]
-    
-    # Check for direct NQAS standard references (e.g., A1, B6, E3)
-    standard_match = re.search(r'([A-H]\d+)', question_stem, re.IGNORECASE)
-    if standard_match:
-        return standard_match.group(1)
-        
-    return question_stem
+def get_context_and_audit(prompt, full_history):
+    # Step 1: Distill Query (Remove MCQ options from search to stop poisoning)
+    question_stem = prompt.split('\n')[0]
+    query_target = re.search(r'([A-H]\d+)', question_stem, re.IGNORECASE)
+    search_term = query_target.group(1) if query_target else question_stem
 
-
-def retrieve_context(clean_query):
-    """Fetches a wider window of chunks to ensure complete standard sets are present."""
+    # Step 2: Retrieve
     r = client.models.embed_content(
         model="gemini-embedding-2-preview", 
-        contents=clean_query, 
+        contents=search_term, 
         config={'output_dimensionality': 768}
     )
-    query_vector = r.embeddings[0].values
-    
-    # Pulling top 8 chunks to fully capture multiple Measurable Elements
-    results = collection.query(query_embeddings=[query_vector], n_results=8)
-    
-    context_list = []
-    for doc, meta in zip(results['documents'][0], results['metadatas'][0]):
-        source = f"[BOOK: {meta.get('book', 'N/A')} | PAGE: {meta.get('page_num', 'N/A')}]"
-        context_list.append(f"{source}\n{doc}")
-        
-    return "\n\n---\n\n".join(context_list)
+    # Pulling 8 chunks to make sure we don't miss "Measurable Elements"
+    results = collection.query(query_embeddings=[r.embeddings[0].values], n_results=8)
+    context = "\n\n---\n\n".join(results['documents'][0])
 
-
-def run_agentic_audit(question, context):
-    """
-    Executes a two-step generation and verification loop.
-    The primary agent solves the question, then an independent auditor verifies the logic.
-    """
+    # Step 3: Format History cleanly (Flash needs simpler history parsing)
+    history_text = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in full_history[-4:]]) if full_history else "No previous history."
     
-    # Phase 1: Absolute Target Analysis
-    generation_prompt = f"""
-    ROLE: Ultra-precise NQAS Auditor. Solve this MCQ based strictly on the provided context.
+    # Step 4: The Strict Audit Prompt (Flash-Lite specific constraints)
+    audit_prompt = f"""
+    ROLE: Elite, Zero-Tolerance NQAS Compliance Auditor.
     
-    CRITICAL CONSTRAINT: Evaluate every single choice option independently against the text evidence. 
-    If options a, b, and c are all separate valid components under this standard framework, 
-    you MUST select the collective option (e.g., 'All of the above').
-
-    CONTEXT:
-    {context}
-
-    QUESTION:
-    {question}
-    """
+    PREVIOUS DISCUSSION HISTORY:
+    {history_text}
     
-    initial_response = client.models.generate_content(model=ai_model, contents=generation_prompt).text
+    NEW USER QUERY:
+    {prompt}
     
-    # Phase 2: Adversarial Verification Review
-    verification_prompt = f"""
-    ROLE: Zero-Tolerance Compliance Verifier.
-    Your job is to catch logical errors, hasty conclusions, or missed options in the proposed solution.
-    
-    PROPOSED SOLVER OUTPUT:
-    {initial_response}
-    
-    RAW REFERENCE CONTEXT:
+    TEXTBOOK CONTEXT:
     {context}
     
-    TASK: Validate the proposed choice. Ensure every option mentioned in the answer is verbatim backed by the text.
-    If the solver missed a collective option (like 'All of the above'), fix the error completely.
-    Output ONLY the final, verified, and polished layout using emojis for visual structure. 
-    Format with: ✅ CORRECT ANSWER, 📖 TEXTBOOK EVIDENCE, and ⚡ QUICK RATIONALE.
+    TASK PROTOCOL: 
+    1. If the user is asking a NEW MCQ: Provide the 100% correct answer using ONLY the Textbook Context for factual truth. 
+    *CRITICAL FOR MCQ*: You must evaluate each option independently. If options a, b, and c are all true based on the text, you MUST select 'All of the above' if it is an option.
+    2. If the user is asking a FOLLOW-UP: Answer their specific doubt based strictly on the previous discussion. Do not hallucinate outside rules.
+    
+    FORMATTING:
+    Format strictly with: ✅ CORRECT ANSWER, 📖 TEXTBOOK EVIDENCE, and ⚡ QUICK RATIONALE.
     """
     
-    final_verified_output = client.models.generate_content(model=ai_model, contents=verification_prompt).text
-    return final_verified_output
+    return client.models.generate_content(model=ai_model, contents=audit_prompt).text
 
 
 # --- 4. STREAMLIT UI EXECUTION ---
@@ -164,27 +130,24 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-prompt = st.chat_input('Paste the MCQ here...')
-
-if prompt:
-    with st.chat_message('user'):
-        st.write(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
-
-    with st.spinner('Running Dual-Agent Audit Verification...'): 
+if prompt := st.chat_input('Paste MCQ or ask a follow-up...'):
+    
+    # Render user prompt instantly
+    with st.chat_message('user'): 
+        st.markdown(prompt)
+    
+    with st.spinner('Auditing Answer...'): 
         try:
-            # Step A: Distill the query to protect the vector search
-            clean_search_target = distill_query(prompt)
+            # Execute audit using Flash-Lite
+            response = get_context_and_audit(prompt, st.session_state.messages)
             
-            # Step B: Secure the reference text
-            retrieved_text = retrieve_context(clean_search_target)
-            
-            # Step C: Route through the multi-agent execution ring
-            final_answer = run_agentic_audit(prompt, retrieved_text)
-            
-            with st.chat_message('ai'):
-                st.markdown(final_answer)
-            st.session_state.messages.append({"role": "assistant", "content": final_answer})
+            # Display response
+            with st.chat_message('assistant'): 
+                st.markdown(response)
+                
+            # Store in session state AFTER successful generation
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            st.session_state.messages.append({"role": "assistant", "content": response})
                     
         except Exception as e:
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
@@ -193,7 +156,7 @@ if prompt:
                     new_key = random.choice([k for k in keys if k != old_key])
                     st.session_state.assigned_key = new_key
                     
-                    # Re-initialize the client on key rotation
+                    # Cycle the key and rerun
                     client = genai.Client(api_key=new_key)
                     st.rerun()
                 else:
