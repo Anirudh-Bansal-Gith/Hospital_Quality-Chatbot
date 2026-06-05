@@ -83,7 +83,7 @@ if 'assigned_key' not in st.session_state:
 
 client = get_genai_client(st.session_state.assigned_key)
 collection = get_db_collection()
-ai_model = "gemini-3-flash"
+ai_model = "gemini-2.5-flash-lite"
 
 
 
